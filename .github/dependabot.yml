@@ -1,0 +1,23 @@
+# Dependabot: abre PR sozinho quando sai correção para uma dependência.
+# O PR passa pela mesma esteira que qualquer outro — nada entra sem teste.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      # Correções e versões menores num PR só, para não afogar a equipe.
+      menores:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly, day: monday }
+    open-pull-requests-limit: 5
+    groups:
+      menores:
+        update-types: [minor, patch]
+  # As próprias actions da esteira também envelhecem e recebem correção.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }

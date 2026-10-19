@@ -1,0 +1,285 @@
+# Esteira do ConnectPatas — build, testes, SAST, SCA e DAST.
+#
+# Roda em todo pull request para a main e em todo push na main (GitHub Flow,
+# Seção 6.2). O job "Portão" é o check obrigatório da proteção de branch: só
+# fica verde se os quatro estágios passarem, e sem ele verde não há merge.
+#
+# O que barra o merge (e o que só avisa) está escrito em cada job.
+
+name: Esteira
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Toda segunda às 6h (Brasília). Vulnerabilidade nova aparece em dependência
+  # sem ninguém mexer no código; sem esta varredura ela só seria vista no
+  # próximo pull request.
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+# Menor permissão possível por padrão; cada job pede só o que precisa a mais.
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR cancela a rodada antiga: não se gasta fila
+# testando código que já foi substituído.
+concurrency:
+  group: esteira-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  # ---------------------------------------------------------------- 1. testes
+  # Barra: build quebrado, qualquer teste falhando.
+  testes:
+    name: Build e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: connectpatas_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/connectpatas
+      DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/connectpatas_test
+      SESSION_SECRET: segredo-de-ci-sem-valor-real-0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend — dependências
+        working-directory: backend
+        run: npm ci
+
+      - name: Backend — testes automatizados
+        working-directory: backend
+        run: npm test
+
+      - name: Frontend — dependências e build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+  # ---------------------------------------------------------------- 2. SAST
+  # Barra: achado de severidade ERROR no Semgrep; qualquer segredo no Gitleaks.
+  # Avisa: WARNING e INFO do Semgrep, que vão para triagem (ver docs/seguranca).
+  sast:
+    name: SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # o Gitleaks varre o histórico inteiro, não só o último commit
+
+      - name: Segredos no código e no histórico (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Conta pessoal: gratuito, não precisa de licença.
+          # Conta de organização: exige GITLEAKS_LICENSE (gratuita, pedida no site).
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Análise estática (Semgrep)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep semgrep scan \
+            --config p/javascript --config p/nodejs --config p/expressjs \
+            --config p/react --config p/secrets \
+            --metrics=off --sarif --output semgrep.sarif \
+            --severity ERROR --error
+
+      - name: Relatório completo do Semgrep (todas as severidades, para triagem)
+        if: always()
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep semgrep scan \
+            --config p/javascript --config p/nodejs --config p/expressjs \
+            --config p/react --config p/secrets \
+            --metrics=off --sarif --output semgrep-completo.sarif || true
+
+      - name: Guardar relatórios
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-relatorios
+          path: '*.sarif'
+
+      # Code scanning do GitHub: gratuito em repositório público. Em privado
+      # exige GitHub Advanced Security — aí o relatório fica só no artefato acima.
+      - name: Publicar no painel de segurança do GitHub
+        if: always() && github.event.repository.private == false
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep-completo.sarif
+
+  # ---------------------------------------------------------------- 3. SCA
+  # Barra: vulnerabilidade alta ou crítica em dependência que vai para
+  # produção. Moderadas e as de ferramentas de desenvolvimento só avisam —
+  # entram no relatório e o Dependabot abre PR de correção quando existe.
+  sca:
+    name: SCA
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # O npm audit lê o package-lock.json; não precisa instalar nada antes.
+      - name: Backend — dependências de produção
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Frontend — dependências de produção
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Relatório completo, inclusive ferramentas de desenvolvimento
+        if: always()
+        run: |
+          (cd backend && npm audit --json > ../sca-backend.json) || true
+          (cd frontend && npm audit --json > ../sca-frontend.json) || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sca-relatorios
+          path: sca-*.json
+
+      # Num PR, compara as dependências antes e depois e barra a que ENTRA
+      # já vulnerável — pega o problema no momento em que ele é introduzido.
+      - name: Revisão das dependências do PR
+        if: github.event_name == 'pull_request' && github.event.repository.private == false
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  # ---------------------------------------------------------------- 4. DAST
+  # Sobe a aplicação de verdade e ataca de fora, como um invasor faria.
+  # Barra: falha no teste de fumaça; alerta do ZAP marcado como FAIL em
+  # .zap/regras.tsv (cabeçalhos de proteção, cookie, vazamento de tecnologia).
+  dast:
+    name: DAST
+    needs: testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: connectpatas
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/connectpatas
+      SESSION_SECRET: segredo-de-ci-sem-valor-real-0123456789abcdef
+      PORT: '3001'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Preparar banco com a massa de demonstração
+        working-directory: backend
+        run: |
+          npm ci
+          npm run db:migrate
+          npm run db:seed
+
+      - name: Subir a API
+        working-directory: backend
+        run: |
+          nohup npm start > ../api.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:3001/api/saude && break; sleep 1; done
+
+      # As telas são o BUILD de produção servido pelo `vite preview`, com os
+      # mesmos cabeçalhos de proteção de produção — nunca o servidor de dev.
+      - name: Subir as telas (build de produção)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+          nohup npx vite preview --port 4173 > ../preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4173/ > /dev/null && break; sleep 1; done
+
+      - name: Teste de fumaça (caminho principal, 28 verificações)
+        working-directory: backend
+        run: ./scripts/fumaca.sh http://localhost:3001
+
+      - name: ZAP — telas
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:4173
+          rules_file_name: .zap/regras.tsv
+          cmd_options: -I -a
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-telas
+
+      - name: ZAP — API
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: http://localhost:3001/api/publico/animais
+          rules_file_name: .zap/regras.tsv
+          cmd_options: -I -a
+          allow_issue_writing: false
+          fail_action: true
+          artifact_name: zap-api
+
+      - name: Logs dos servidores, se algo falhou
+        if: failure()
+        run: |
+          echo '--- API ---'; tail -50 api.log || true
+          echo '--- preview ---'; tail -50 preview.log || true
+
+  # ---------------------------------------------------------------- portão
+  # O único check obrigatório na proteção da branch main. Concentra os quatro
+  # estágios num nome só, para a regra de proteção não precisar mudar quando
+  # um estágio for acrescentado.
+  portao:
+    name: Portão
+    if: always()
+    needs: [testes, sast, sca, dast]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Todos os estágios passaram?
+        run: |
+          echo "testes: ${{ needs.testes.result }}"
+          echo "sast:   ${{ needs.sast.result }}"
+          echo "sca:    ${{ needs.sca.result }}"
+          echo "dast:   ${{ needs.dast.result }}"
+          test "${{ needs.testes.result }}" = success
+          test "${{ needs.sast.result }}" = success
+          test "${{ needs.sca.result }}" = success
+          test "${{ needs.dast.result }}" = success

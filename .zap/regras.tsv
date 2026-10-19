@@ -1,0 +1,16 @@
+# Regras do ZAP baseline para o ConnectPatas. Formato: id<TAB>FAIL|WARN|IGNORE<TAB>(nome)
+# FAIL barra o merge. Cada uma corresponde a uma proteção já implementada e
+# coberta por teste: se voltar a faltar, é regressão, não novidade.
+10020	FAIL	(Anti-clickjacking Header ausente)
+10021	FAIL	(X-Content-Type-Options ausente)
+10038	FAIL	(Content Security Policy ausente)
+10010	FAIL	(Cookie sem HttpOnly)
+10054	FAIL	(Cookie sem SameSite)
+10037	FAIL	(Servidor vaza tecnologia via X-Powered-By)
+# WARN: entra no relatório e vai para triagem, não barra.
+10011	WARN	(Cookie sem Secure — esperado em CI, que roda em HTTP; em produção o cookie sai com Secure)
+10055	WARN	(Detalhes da CSP)
+10096	WARN	(Timestamp no corpo — datas de cadastro no JSON, não são segredo)
+# IGNORE: informativos sem ação possível.
+10109	IGNORE	(Modern Web Application — só informa que é SPA)
+10049	IGNORE	(Conteúdo armazenável em cache — informativo)
