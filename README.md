@@ -3,7 +3,7 @@
 Plataforma web para ONGs de proteção animal gerenciarem animais acolhidos,
 adotantes e o processo de adoção responsável.
 
-Projeto Integrador do curso de Análise e Desenvolvimento de Sistemas —
+Projeto do curso de Análise e Desenvolvimento de Sistemas —
 IFSP Campus Hortolândia. Letícia Capovila, Luri Serdan e Nilson Barra.
 
 A especificação técnica está em `docs/`. Quando este README e o documento
