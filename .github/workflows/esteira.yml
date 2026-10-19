@@ -95,7 +95,7 @@ jobs:
           fetch-depth: 0 # o Gitleaks varre o histórico inteiro, não só o último commit
 
       - name: Segredos no código e no histórico (Gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Conta pessoal: gratuito, não precisa de licença.
