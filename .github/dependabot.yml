@@ -1,23 +1,36 @@
 # Dependabot: abre PR sozinho quando sai correção para uma dependência.
 # O PR passa pela mesma esteira que qualquer outro — nada entra sem teste.
+#
+# Versões principais (React 18 -> 19, Vite 5 -> 8...) ficam de fora: elas
+# mudam a forma de usar a biblioteca e exigem migração planejada, não um
+# merge automático. Na primeira rodada sem essa regra o Dependabot abriu 15 PRs
+# de uma vez, a maioria de versão principal.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /backend
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
-      # Correções e versões menores num PR só, para não afogar a equipe.
       menores:
         update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     schedule: { interval: weekly, day: monday }
     open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
     groups:
       menores:
         update-types: [minor, patch]
-  # As próprias actions da esteira também envelhecem e recebem correção.
+  # As próprias actions da esteira também envelhecem; num PR só, todas juntas.
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ['*']

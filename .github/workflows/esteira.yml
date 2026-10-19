@@ -31,7 +31,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
+  # Node 20 saiu de suporte em abril de 2026; 22 é a LTS em manutenção.
+  NODE_VERSION: '22'
 
 jobs:
   # ---------------------------------------------------------------- 1. testes
@@ -89,6 +90,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
+      # Em pull request o Gitleaks consulta os commits do PR pela API.
+      # Sem esta permissão ele falha em todo PR e passa só no push.
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -235,7 +239,9 @@ jobs:
 
       - name: Teste de fumaça (caminho principal, 28 verificações)
         working-directory: backend
-        run: ./scripts/fumaca.sh http://localhost:3001
+        # Pelo bash, e não ./fumaca.sh: o Git no Windows não guarda a marca de
+        # executável, e sem ela o passo morre com "permissão negada" (código 126).
+        run: bash ./scripts/fumaca.sh http://localhost:3001
 
       - name: ZAP — telas
         uses: zaproxy/action-baseline@v0.14.0
