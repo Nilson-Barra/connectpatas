@@ -56,7 +56,7 @@ jobs:
       DATABASE_URL_TEST: postgresql://postgres:postgres@localhost:5432/connectpatas_test
       SESSION_SECRET: segredo-de-ci-sem-valor-real-0123456789abcdef
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -90,7 +90,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # o Gitleaks varre o histórico inteiro, não só o último commit
 
@@ -142,7 +142,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -201,7 +201,7 @@ jobs:
       SESSION_SECRET: segredo-de-ci-sem-valor-real-0123456789abcdef
       PORT: '3001'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
