@@ -5,6 +5,9 @@ import { Carregando, Erro, Pill, Retrato, Vazio } from '../componentes';
 
 // UC04 — consulta pública. Não exige login: é a porta de entrada de quem
 // chega pelo cartaz ou pelo Instagram da ONG.
+// No banco a espécie é Canina/Felina; na tela a pessoa lê cachorro ou gato.
+const NOME_DA_ESPECIE = { Canina: 'Cachorro', Felina: 'Gato' };
+
 export default function Catalogo() {
   const [filtros, setFiltros] = useState({ texto: '', especie: '', porte: '' });
   const [dados, setDados] = useState(null);
@@ -58,16 +61,17 @@ export default function Catalogo() {
       <div className="card flat">
         <div className="fields">
           <div className="f">
+            <label htmlFor="fe">Gato ou cachorro</label>
+            <select id="fe" value={filtros.especie} onChange={mudar('especie')}>
+              <option value="">Todos</option>
+              <option value="Canina">Cachorro</option>
+              <option value="Felina">Gato</option>
+            </select>
+          </div>
+          <div className="f">
             <label htmlFor="fx">Buscar</label>
             <input id="fx" type="search" placeholder="Nome, raça ou característica"
                    value={filtros.texto} onChange={mudar('texto')} />
-          </div>
-          <div className="f">
-            <label htmlFor="fe">Espécie</label>
-            <select id="fe" value={filtros.especie} onChange={mudar('especie')}>
-              <option value="">Todas</option>
-              <option>Canina</option><option>Felina</option><option>Outra</option>
-            </select>
           </div>
           <div className="f">
             <label htmlFor="fp">Porte</label>
@@ -96,7 +100,7 @@ export default function Catalogo() {
                 <Pill>{a.status}</Pill>
               </span>
               <span className="meta">
-                {[a.especie, a.idade, a.porte && `porte ${a.porte.toLowerCase()}`]
+                {[NOME_DA_ESPECIE[a.especie] || a.especie, a.idade, a.porte && `porte ${a.porte.toLowerCase()}`]
                   .filter(Boolean).join(' · ')}
               </span>
             </Link>

@@ -62,7 +62,7 @@ export default function FichaAnimal() {
   if (!animal) return <Carregando />;
 
   const fichas = [
-    ['Espécie', animal.especie], ['Raça', animal.raca],
+    ['Espécie', { Canina: 'Cachorro', Felina: 'Gato' }[animal.especie] || animal.especie], ['Raça', animal.raca],
     ['Idade', animal.idade], ['Porte', animal.porte],
   ].filter(([, v]) => v);
 
