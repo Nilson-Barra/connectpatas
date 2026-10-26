@@ -225,6 +225,27 @@ disso, só a equipe da ONG e quem pediu para adotá-lo a enxergam.
 As fotos da massa de demonstração são do Pexels; os créditos estão em
 `backend/src/seeders/fotos/CREDITOS.md`.
 
+## Publicação (Render)
+
+O site publicado roda no Render, plano gratuito, com o banco no Neon. Em
+produção a própria API entrega as telas: um endereço só, sem CORS.
+
+A configuração está em `render.yaml`. Para publicar pela primeira vez:
+
+1. No Render, entre com a conta do GitHub e escolha New → Blueprint.
+2. Escolha este repositório. O Render lê o `render.yaml` sozinho.
+3. Preencha `DATABASE_URL` (connection string do Neon) e `AGENTE_CHAVE_API`
+   (chave do Groq). O `SESSION_SECRET` o Render gera sozinho.
+4. Clique em Apply e espere o primeiro build.
+
+Depois disso, todo merge na `main` publica a versão nova sozinho, e as
+migrations rodam no build. A massa de demonstração não é recarregada: para
+isso, rode `npm run db:reset` no seu computador apontando para o Neon.
+
+No plano gratuito o site dorme depois de 15 minutos sem acesso, e o primeiro
+acesso seguinte leva cerca de um minuto. Antes de apresentar, abra o site uns
+minutos antes.
+
 ## Usuários de demonstração
 
 Todos com a senha `connectpatas`.
