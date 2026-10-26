@@ -6,9 +6,11 @@
 async function pedir(caminho, opcoes = {}) {
   const resposta = await fetch(`/api${caminho}`, {
     credentials: 'include',
-    headers: opcoes.corpo ? { 'Content-Type': 'application/json' } : undefined,
+    headers: opcoes.arquivo
+      ? { 'Content-Type': opcoes.arquivo.type }
+      : opcoes.corpo ? { 'Content-Type': 'application/json' } : undefined,
     method: opcoes.metodo || 'GET',
-    body: opcoes.corpo ? JSON.stringify(opcoes.corpo) : undefined,
+    body: opcoes.arquivo || (opcoes.corpo ? JSON.stringify(opcoes.corpo) : undefined),
   });
 
   if (resposta.status === 204) return null;
@@ -30,6 +32,7 @@ export const api = {
   entrar: (email, senha) => pedir('/auth/login', { metodo: 'POST', corpo: { email, senha } }),
   sair: () => pedir('/auth/logout', { metodo: 'POST' }),
   eu: () => pedir('/auth/eu'),
+  cadastrar: (dados) => pedir('/auth/cadastro', { metodo: 'POST', corpo: dados }),
 
   // catálogo público (UC04)
   catalogo: (filtros = {}) => {
@@ -47,6 +50,9 @@ export const api = {
   animal: (id) => pedir(`/animais/${id}`),
   criarAnimal: (dados) => pedir('/animais', { metodo: 'POST', corpo: dados }),
   salvarAnimal: (id, dados) => pedir(`/animais/${id}`, { metodo: 'PUT', corpo: dados }),
+  // A foto vai como o próprio arquivo, com o tipo da imagem (RF03).
+  enviarFoto: (id, arquivo) => pedir(`/animais/${id}/foto`, { metodo: 'PUT', arquivo }),
+  removerFoto: (id) => pedir(`/animais/${id}/foto`, { metodo: 'DELETE' }),
 
   // assistente de cuidados (UC11 a UC13)
   perguntar: (pergunta, idConversa) =>

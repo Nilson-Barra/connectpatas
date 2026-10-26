@@ -47,6 +47,7 @@ export default function Assistente() {
         conteudo: r.conteudo,
         fontes: r.fontes || [],
         confianca: r.confianca,
+        modo: r.modo,
         ofereceEscalar: r.ofereceEscalar,
       }]);
     } catch (e) {
@@ -96,9 +97,10 @@ export default function Assistente() {
           <div className="notice">
             <Icone nome="alert" tamanho={18} />
             <span>
-              <strong>Orientação informativa.</strong> O assistente responde com o
-              conteúdo validado pela ONG e não substitui a avaliação de um médico
-              veterinário. Em caso de urgência, procure atendimento.
+              <strong>Orientação informativa.</strong> O assistente responde primeiro
+              com o conteúdo validado pela ONG e, quando ele não cobre a dúvida, com
+              páginas da internet, sempre com o link. Não substitui a avaliação de um
+              médico veterinário. Em caso de urgência, procure atendimento.
             </span>
           </div>
 
@@ -113,12 +115,21 @@ export default function Assistente() {
                     <span>{m.conteudo}</span>
                     {m.fontes && m.fontes.length > 0 && (
                       <span className="src">
-                        <span className="eyebrow">Fontes</span>
-                        {m.fontes.map((f) => (
-                          <span className="tag" key={f.id} title={`${f.fonte} · validado por ${f.validadoPor}`}>
+                        <span className="eyebrow">
+                          {m.modo === 'groq-web'
+                            ? 'Encontrado na internet, não validado pela ONG'
+                            : m.modo === 'groq' ? 'Escrito por IA a partir de' : 'Fontes'}
+                        </span>
+                        {m.fontes.map((f, j) => (f.url ? (
+                          <a className="tag" key={f.url} href={f.url}
+                            target="_blank" rel="noopener noreferrer" title={f.url}>
+                            <Icone nome="book" tamanho={13} />{f.titulo}
+                          </a>
+                        ) : (
+                          <span className="tag" key={f.id || j} title={`${f.fonte} · validado por ${f.validadoPor}`}>
                             <Icone nome="book" tamanho={13} />{f.titulo}
                           </span>
-                        ))}
+                        )))}
                       </span>
                     )}
                   </div>
@@ -129,7 +140,7 @@ export default function Assistente() {
             {ocupado && (
               <div className="ia">
                 <span className="av"><Icone nome="spark" tamanho={17} /></span>
-                <div className="corpo"><span className="meta">Procurando na base…</span></div>
+                <div className="corpo"><span className="meta">Procurando a resposta…</span></div>
               </div>
             )}
             <span ref={fim} />
@@ -184,8 +195,9 @@ export default function Assistente() {
           <h2>Como funciona</h2>
           {[
             'Sua pergunta é comparada com os itens da base mantida pela ONG.',
-            'A resposta é montada só com esses itens, e as fontes ficam visíveis abaixo dela.',
-            'Sem informação suficiente, a dúvida é encaminhada para a equipe da ONG.',
+            'A resposta é escrita só com esses itens, e as fontes ficam visíveis abaixo dela.',
+            'Se a base não cobre a dúvida, ele pesquisa na internet e mostra os links usados.',
+            'Sem resposta confiável, a dúvida é encaminhada para a equipe da ONG.',
           ].map((t, i) => (
             <div className="step" key={t}>
               <span className="dot on" style={{ fontSize: 12, fontWeight: 700 }}>{i + 1}</span>

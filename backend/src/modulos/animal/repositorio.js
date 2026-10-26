@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Animal, Ong } = require('../../models');
+const { Animal, FotoAnimal, Ong } = require('../../models');
 
 // Padrão Repository (Seção 7.3): os módulos de negócio falam com estes
 // métodos, nunca com o ORM nem com SQL direto.
@@ -22,7 +22,10 @@ const repositorio = {
     return Animal.findAndCountAll({
       where,
       include: [{ model: Ong, as: 'ong', attributes: ['id', 'nome', 'cidade'] }],
-      order: [['createdAt', 'DESC']],
+      // O id desempata: animais cadastrados no mesmo instante (a massa de
+      // demonstração inteira, por exemplo) mudavam de ordem a cada consulta,
+      // e o "ver mais" repetia uns e pulava outros.
+      order: [['createdAt', 'DESC'], ['id', 'DESC']],
       limit: porPagina,
       offset: (pagina - 1) * porPagina,
     });
@@ -41,6 +44,15 @@ const repositorio = {
     animal.set(dados);
     return animal.save(opcoes);
   },
+
+  // ---- foto (RF03): uma por animal
+  fotoDoAnimal: (idAnimal) => FotoAnimal.findByPk(idAnimal),
+
+  async salvarFoto(idAnimal, { dados, tipo }) {
+    await FotoAnimal.upsert({ idAnimal, dados, tipo });
+  },
+
+  removerFoto: (idAnimal) => FotoAnimal.destroy({ where: { idAnimal } }),
 
   contarPorStatus: (idOng) =>
     Animal.findAll({

@@ -64,7 +64,7 @@ export default function MinhasSolicitacoes() {
 
             <Link className="animal" to={`/solicitacoes/${s.id}`} style={{ padding: 16 }}>
               <div className="rowx" style={{ gap: 14, flexWrap: 'nowrap' }}>
-                <div style={{ width: 92, flex: 'none' }}><Retrato id={s.animal.id} /></div>
+                <div style={{ width: 92, flex: 'none' }}><Retrato id={s.animal.id} foto={s.animal.fotografia} nome={s.animal.nome} /></div>
                 <span className="stack" style={{ gap: 4, minWidth: 0 }}>
                   <span className="nm">{s.animal.nome}</span>
                   <span className="meta">

@@ -162,9 +162,9 @@ button { font: inherit; cursor: pointer; }
 .pill.clay { background: var(--acc-soft); color: var(--acc); }
 
 /* ---- formulários ---- */
-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+label, .lbl { font-size: 13px; font-weight: 600; color: var(--muted); }
 input[type=text], input[type=email], input[type=password], input[type=search],
-input[type=number], select, textarea {
+input[type=number], input[type=tel], select, textarea {
   width: 100%; min-width: 0; height: 44px; padding: 0 13px;
   border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); color: var(--ink); font: inherit; font-size: 14.5px;
@@ -250,6 +250,9 @@ td { padding: 11px 10px 11px 0; border-top: 1px solid var(--line); vertical-alig
   border-radius: 999px; background: var(--ground); border: 1px solid var(--line);
   font-size: 12px; font-weight: 600; color: var(--pri);
 }
+/* Fonte da internet é link: sublinha ao passar o mouse e corta título longo. */
+a.tag { text-decoration: none; max-width: 280px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+a.tag:hover { text-decoration: underline; }
 
 /* ---- avisos ---- */
 .notice {

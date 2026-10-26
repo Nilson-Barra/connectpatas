@@ -25,6 +25,19 @@ module.exports = (sequelize) => {
     { sequelize, modelName: 'Animal', tableName: 'animal' }
   );
 
+  // Os bytes da foto (RF03). Separados do animal para que listar animais não
+  // arraste dezenas de KB por linha.
+  class FotoAnimal extends Model {}
+  FotoAnimal.init(
+    {
+      idAnimal: { type: DataTypes.INTEGER, primaryKey: true },
+      tipo: { type: DataTypes.STRING(30), allowNull: false, defaultValue: 'image/webp' },
+      dados: { type: DataTypes.BLOB, allowNull: false },
+    },
+    { sequelize, modelName: 'FotoAnimal', tableName: 'foto_animal' }
+  );
+  Animal.Foto = FotoAnimal;
+
   Animal.STATUS = STATUS;
   Animal.associate = (m) => {
     Animal.belongsTo(m.Ong, { foreignKey: 'idOng', as: 'ong' });

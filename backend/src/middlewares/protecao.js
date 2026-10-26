@@ -58,6 +58,32 @@ function limparFalhas(req, email) {
   falhas.delete(chave(req, email));
 }
 
+// Freio de criação de contas. Sem ele, um script cria milhares de contas
+// falsas por minuto. Conta só os cadastros que deram certo, por IP: uma
+// família inteira no mesmo wi-fi ainda consegue criar as contas dela.
+const JANELA_CADASTRO_MS = 60 * 60 * 1000;
+const MAXIMO_CADASTROS = 5;
+const cadastros = new Map();
+
+function cadastroBloqueado(req) {
+  const r = cadastros.get(req.ip);
+  if (!r) return 0;
+  if (Date.now() - r.inicio > JANELA_CADASTRO_MS) { cadastros.delete(req.ip); return 0; }
+  return r.total >= MAXIMO_CADASTROS
+    ? Math.ceil((r.inicio + JANELA_CADASTRO_MS - Date.now()) / 1000) : 0;
+}
+
+function registrarCadastro(req) {
+  const r = cadastros.get(req.ip);
+  if (!r || Date.now() - r.inicio > JANELA_CADASTRO_MS) {
+    cadastros.set(req.ip, { inicio: Date.now(), total: 1 });
+  } else r.total += 1;
+}
+
+// Só os testes usam: cada bloco de teste começa com o contador zerado.
+const zerarCadastros = () => cadastros.clear();
+
 module.exports = {
   cabecalhos, politicaDaApi, bloqueado, registrarFalha, limparFalhas, MAXIMO,
+  cadastroBloqueado, registrarCadastro, zerarCadastros,
 };

@@ -121,7 +121,7 @@ export default function DetalheSolicitacao() {
       </Link>
 
       <div className="head" style={{ alignItems: 'center' }}>
-        <div style={{ width: 86, flex: 'none' }}><Retrato id={animal.id} /></div>
+        <div style={{ width: 86, flex: 'none' }}><Retrato id={animal.id} foto={animal.fotografia} nome={animal.nome} /></div>
         <div className="stack" style={{ gap: 4, flexGrow: 1 }}>
           <h1>{animal.nome}</h1>
           <p className="meta">
