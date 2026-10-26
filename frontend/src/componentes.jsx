@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { NavLink, Navigate } from 'react-router-dom';
 import { useSessao } from './sessao';
 import Icone from './icones';
@@ -40,11 +41,21 @@ export function Pill({ children, cor }) {
   return <span className={`pill ${cor || COR[children] || 'grey'}`}>{children}</span>;
 }
 
-// Retrato do animal. O campo de foto existe no banco (RF03) mas ainda não há
-// upload, então desenhamos a pata sobre uma das seis tintas da paleta. O
-// índice vem do id: o mesmo animal fica sempre com a mesma cor.
-export function Retrato({ id, estilo }) {
+// Retrato do animal (RF03). Com foto, mostra a foto; sem foto, ou se ela não
+// carregar, desenha a pata sobre uma das seis tintas da paleta. O índice vem
+// do id: o mesmo animal fica sempre com a mesma cor.
+export function Retrato({ id, foto, nome, estilo }) {
+  const [falhou, setFalhou] = useState(false);
   const tinta = `var(--t${(Number(id) % 6) + 1})`;
+  if (foto && !falhou) {
+    return (
+      <div className="thumb" style={{ background: tinta, overflow: 'hidden', ...estilo }}>
+        <img src={foto} alt={nome ? `Foto de ${nome}` : ''} loading="lazy"
+             onError={() => setFalhou(true)}
+             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </div>
+    );
+  }
   return (
     <div className="thumb" style={{ background: tinta, ...estilo }} aria-hidden="true">
       <span style={{ color: 'var(--thumb-ink)' }}>
@@ -52,6 +63,15 @@ export function Retrato({ id, estilo }) {
       </span>
     </div>
   );
+}
+
+// Para onde voltar depois de entrar ou criar conta. Só caminho interno do
+// próprio site: "//outro-site.com" ou barra invertida viraria redirecionamento
+// para fora (o alerta do react-router anotado em docs/seguranca/triagem.md).
+export function destinoSeguro(destino) {
+  if (typeof destino !== 'string') return '';
+  if (!/^\/[A-Za-z0-9\-._~/?=&%]*$/.test(destino) || destino.startsWith('//')) return '';
+  return destino;
 }
 
 // Etapas do processo de adoção (UC07), com os nomes do diagrama de máquina

@@ -9,18 +9,35 @@ export default function Catalogo() {
   const [filtros, setFiltros] = useState({ texto: '', especie: '', porte: '' });
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState('');
+  const [pagina, setPagina] = useState(1);
+  const [maisCarregando, setMaisCarregando] = useState(false);
 
+  // Filtro novo recomeça da primeira página.
   useEffect(() => {
     let atual = true;
     setErro('');
     // Pequena espera: filtrar a cada tecla digitada bate na API à toa.
     const t = setTimeout(() => {
       api.catalogo(filtros)
-        .then((d) => { if (atual) setDados(d); })
+        .then((d) => { if (atual) { setDados(d); setPagina(1); } })
         .catch((e) => { if (atual) setErro(e.message); });
     }, 250);
     return () => { atual = false; clearTimeout(t); };
   }, [filtros.texto, filtros.especie, filtros.porte]);
+
+  // A API entrega 12 por vez; o botão busca a próxima leva e soma à lista.
+  async function verMais() {
+    setMaisCarregando(true);
+    try {
+      const d = await api.catalogo({ ...filtros, pagina: pagina + 1 });
+      setDados((atual) => ({ ...d, animais: [...atual.animais, ...d.animais] }));
+      setPagina(pagina + 1);
+    } catch (e) {
+      setErro(e.message);
+    } finally {
+      setMaisCarregando(false);
+    }
+  }
 
   const mudar = (campo) => (e) => setFiltros({ ...filtros, [campo]: e.target.value });
   const total = dados ? dados.total : 0;
@@ -73,7 +90,7 @@ export default function Catalogo() {
         <div className="grid g4">
           {dados.animais.map((a) => (
             <Link className="animal" to={`/animais/${a.id}`} key={a.id}>
-              <Retrato id={a.id} />
+              <Retrato id={a.id} foto={a.fotografia} nome={a.nome} />
               <span className="rowx" style={{ gap: 9 }}>
                 <span className="nm" style={{ flexGrow: 1 }}>{a.nome}</span>
                 <Pill>{a.status}</Pill>
@@ -84,6 +101,16 @@ export default function Catalogo() {
               </span>
             </Link>
           ))}
+        </div>
+      )}
+
+      {dados && dados.animais.length < total && (
+        <div className="rowx" style={{ justifyContent: 'center', marginTop: 8 }}>
+          <button className="btn quiet" onClick={verMais} disabled={maisCarregando}>
+            {maisCarregando
+              ? 'Carregando…'
+              : `Ver mais animais (${total - dados.animais.length} restantes)`}
+          </button>
         </div>
       )}
     </>

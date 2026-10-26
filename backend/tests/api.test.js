@@ -57,9 +57,75 @@ describe('autenticação (RNF03)', () => {
   });
 });
 
+describe('criar conta pela tela (adotante)', () => {
+  const { zerarCadastros } = require('../src/middlewares/protecao');
+  beforeEach(() => zerarCadastros());
+  const nova = (extra = {}) => ({
+    nome: 'Joana Teste', email: `joana.${Date.now()}.${Math.random()}@exemplo.com`,
+    senha: 'patinhas123', telefone: '(19) 98765-4321', ...extra,
+  });
+
+  it('cria a conta de adotante e já deixa logado', async () => {
+    const agente = request.agent(app);
+    const r = await agente.post('/api/auth/cadastro').send(nova());
+    expect(r.status).toBe(201);
+    expect(r.body.usuario.tipoUsuario).toBe('adotante');
+    expect(r.headers['set-cookie'][0]).toMatch(/HttpOnly/i);
+    const eu = await agente.get('/api/auth/eu');
+    expect(eu.status).toBe(200);
+    expect(eu.body.usuario.senhaHash).toBeUndefined();
+    // e consegue usar a área do adotante
+    expect((await agente.get('/api/minhas-solicitacoes')).status).toBe(200);
+  });
+
+  it('ignora quem tenta se cadastrar como equipe da ONG (RNF03)', async () => {
+    const agente = request.agent(app);
+    const r = await agente.post('/api/auth/cadastro')
+      .send(nova({ tipoUsuario: 'responsavel_ong', idOng: 1 }));
+    expect(r.body.usuario.tipoUsuario).toBe('adotante');
+    expect(r.body.usuario.idOng).toBeNull();
+    expect((await agente.get('/api/painel')).status).toBe(403);
+  });
+
+  it('a conta criada entra pelo login normal', async () => {
+    const dados = nova();
+    await request(app).post('/api/auth/cadastro').send(dados);
+    const r = await request(app).post('/api/auth/login')
+      .send({ email: dados.email.toUpperCase(), senha: dados.senha });
+    expect(r.status).toBe(200);
+  });
+
+  it('recusa e-mail que já tem conta', async () => {
+    const r = await request(app).post('/api/auth/cadastro')
+      .send(nova({ email: 'maria@exemplo.com' }));
+    expect(r.status).toBe(409);
+  });
+
+  it.each([
+    [{ senha: 'curta1' }, 'senha'],
+    [{ senha: 'somenteletras' }, 'senha'],
+    [{ email: 'sem-arroba' }, 'email'],
+    [{ nome: ' ' }, 'nome'],
+    [{ telefone: '<script>' }, 'telefone'],
+  ])('recusa dado inválido %j', async (extra, campo) => {
+    const r = await request(app).post('/api/auth/cadastro').send(nova(extra));
+    expect(r.status).toBe(400);
+    expect(r.body.detalhes[0].campo).toBe(campo);
+  });
+
+  it('freia a criação em massa de contas a partir do mesmo endereço', async () => {
+    for (let i = 0; i < 5; i += 1) {
+      expect((await request(app).post('/api/auth/cadastro').send(nova())).status).toBe(201);
+    }
+    const r = await request(app).post('/api/auth/cadastro').send(nova());
+    expect(r.status).toBe(429);
+    expect(r.headers['retry-after']).toBeTruthy();
+  });
+});
+
 describe('consulta pública de animais (UC04)', () => {
   it('lista somente animais disponíveis', async () => {
-    const r = await request(app).get('/api/publico/animais');
+    const r = await request(app).get('/api/publico/animais?porPagina=50');
     expect(r.status).toBe(200);
     expect(r.body.animais.length).toBeGreaterThan(0);
     r.body.animais.forEach((a) => expect(a.status).toBe('Disponível'));
@@ -71,7 +137,7 @@ describe('consulta pública de animais (UC04)', () => {
   });
 
   it('não expõe animal fora de disponível', async () => {
-    const todos = await request(app).get('/api/publico/animais');
+    const todos = await request(app).get('/api/publico/animais?porPagina=50');
     const disponiveis = todos.body.animais.map((a) => a.id);
     const agente = await entrar('leticia@amigosdepatas.org');
     const daOng = await agente.get('/api/animais');
@@ -79,6 +145,18 @@ describe('consulta pública de animais (UC04)', () => {
     expect(adotado).toBeTruthy();
     expect(disponiveis).not.toContain(adotado.id);
     expect((await request(app).get(`/api/publico/animais/${adotado.id}`)).status).toBe(404);
+  });
+});
+
+describe('catálogo em páginas', () => {
+  it('entrega 12 por vez e a página seguinte traz outros animais', async () => {
+    const p1 = await request(app).get('/api/publico/animais');
+    const p2 = await request(app).get('/api/publico/animais?pagina=2');
+    expect(p1.body.animais).toHaveLength(12);
+    expect(p1.body.total).toBeGreaterThan(12);
+    const ids = new Set(p1.body.animais.map((a) => a.id));
+    expect(p2.body.animais.length).toBeGreaterThan(0);
+    expect(p2.body.animais.some((a) => ids.has(a.id))).toBe(false);
   });
 });
 
@@ -137,7 +215,7 @@ describe('regras de cadastro de animal', () => {
 describe('processo de adoção (UC05, UC06, UC07)', () => {
   // Procura pelo nome em vez de fixar o id: a seed pode mudar de ordem.
   const acharPublico = async (nome) => {
-    const r = await request(app).get('/api/publico/animais');
+    const r = await request(app).get('/api/publico/animais?porPagina=50');
     const a = r.body.animais.find((x) => x.nome === nome);
     expect(a).toBeTruthy();
     return a;
@@ -154,7 +232,7 @@ describe('processo de adoção (UC05, UC06, UC07)', () => {
     expect(r.body.solicitacao.etapa).toBe(1);
 
     // o animal passou a "Em processo" e por isso sumiu da vitrine
-    const publico = await request(app).get('/api/publico/animais');
+    const publico = await request(app).get('/api/publico/animais?porPagina=50');
     expect(publico.body.animais.find((x) => x.id === rex.id)).toBeFalsy();
     const ficha = await request(app).get(`/api/publico/animais/${rex.id}`);
     expect(ficha.status).toBe(404);
@@ -239,7 +317,7 @@ describe('processo de adoção (UC05, UC06, UC07)', () => {
       .send({ status: 'Recusada', observacoes: 'Perfil não compatível.' });
     expect(r.status).toBe(200);
 
-    const publico = await request(app).get('/api/publico/animais');
+    const publico = await request(app).get('/api/publico/animais?porPagina=50');
     expect(publico.body.animais.find((x) => x.id === luna.id)).toBeTruthy();
   });
 
@@ -415,14 +493,258 @@ describe('assistente de cuidados (UC11, UC12, UC13)', () => {
 
 // Cada teste aqui nasceu de um achado da esteira de segurança. Se alguém
 // desfizer a correção, a esteira barra o merge.
+describe('foto do animal (RF03)', () => {
+  const sharp = require('sharp');
+  const imagem = (largura, altura, formato = 'png') =>
+    sharp({ create: { width: largura, height: altura, channels: 3, background: '#2F6B5A' } })
+      [formato]().toBuffer();
+
+  let leticia;
+  let idNovo;
+  beforeAll(async () => {
+    leticia = await entrar('leticia@amigosdepatas.org');
+    const r = await leticia.post('/api/animais')
+      .send({ nome: 'Fotogênico', especie: 'Canina', porte: 'Médio' });
+    idNovo = r.body.animal.id;
+  });
+
+  it('animal do catálogo público já vem com foto, e ela abre sem login', async () => {
+    const lista = await request(app).get('/api/publico/animais?porPagina=50');
+    const comFoto = lista.body.animais.find((a) => a.fotografia);
+    expect(comFoto).toBeTruthy();
+    const f = await request(app).get(comFoto.fotografia);
+    expect(f.status).toBe(200);
+    expect(f.headers['content-type']).toBe('image/webp');
+    expect(f.headers['cache-control']).toMatch(/public/);
+  });
+
+  it('foto de animal fora do catálogo não abre para estranho (UC04)', async () => {
+    const todos = await leticia.get('/api/animais');
+    const adotado = todos.body.animais.find((a) => a.status === 'Adotado' && a.fotografia);
+    expect((await request(app).get(`/api/animais/${adotado.id}/foto`)).status).toBe(404);
+    const daEquipe = await leticia.get(`/api/animais/${adotado.id}/foto`);
+    expect(daEquipe.status).toBe(200);
+    expect(daEquipe.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('voluntário envia foto, e ela é guardada reduzida e em WebP', async () => {
+    const luri = await entrar('luri@amigosdepatas.org');
+    const r = await luri.put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/png').send(await imagem(1600, 1200));
+    expect(r.status).toBe(200);
+    expect(r.body.animal.fotografia).toMatch(new RegExp(`^/api/animais/${idNovo}/foto\\?v=\\d+$`));
+
+    const f = await request(app).get(`/api/animais/${idNovo}/foto`);
+    const info = await sharp(f.body).metadata();
+    expect(info.format).toBe('webp');
+    expect(Math.max(info.width, info.height)).toBeLessThanOrEqual(800);
+  });
+
+  it('recusa arquivo que não é imagem, mesmo com tipo de imagem', async () => {
+    const r = await leticia.put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/png').send(Buffer.from('<script>alert(1)</script> nada de imagem'));
+    expect(r.status).toBe(400);
+    expect(r.body.erro).toMatch(/não é uma imagem/i);
+  });
+
+  it('recusa imagem corrompida com cabeçalho falso de JPG', async () => {
+    const falso = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]);
+    const r = await leticia.put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/jpeg').send(falso);
+    expect(r.status).toBe(400);
+  });
+
+  it('recusa foto acima de 5 MB', async () => {
+    const r = await leticia.put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/jpeg').send(Buffer.alloc(5 * 1024 * 1024 + 10));
+    expect(r.status).toBe(413);
+  });
+
+  it('só a equipe da ONG troca a foto (RNF03)', async () => {
+    const png = await imagem(100, 100);
+    const sem = await request(app).put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/png').send(png);
+    expect(sem.status).toBe(401);
+    const maria = await entrar('maria@exemplo.com');
+    const adotante = await maria.put(`/api/animais/${idNovo}/foto`)
+      .set('Content-Type', 'image/png').send(png);
+    expect(adotante.status).toBe(403);
+  });
+
+  it('o endereço da foto não se edita pelo cadastro', async () => {
+    const r = await leticia.put(`/api/animais/${idNovo}`)
+      .send({ fotografia: 'https://site-estranho.example/rastreio.gif' });
+    expect(r.body.animal.fotografia).not.toMatch(/site-estranho/);
+  });
+
+  it('remover a foto volta o animal para a pata', async () => {
+    const r = await leticia.delete(`/api/animais/${idNovo}/foto`);
+    expect(r.body.animal.fotografia).toBeNull();
+    expect((await request(app).get(`/api/animais/${idNovo}/foto`)).status).toBe(404);
+  });
+});
+
+describe('base de conhecimento ampliada', () => {
+  it.each([
+    ['Como faço o RG do meu pet?', 'RG animal: cadastro no SinPatinhas'],
+    ['Meu gato pode ficar perto de lírio?', 'Plantas perigosas: o lírio e os gatos'],
+    ['Achei um carrapato no meu cão, o que faço?', 'Carrapatos e a doença do carrapato'],
+    ['Meu cachorro fica tremendo com medo de fogos, como ajudar?', 'Medo de fogos e trovões'],
+    ['Como funciona o processo de adoção?', 'Como funciona a adoção pelo ConnectPatas'],
+  ])('"%s" é respondida pelo item certo', async (pergunta, titulo) => {
+    const r = await request(app).post('/api/assistente/perguntar').send({ pergunta });
+    expect(r.body.tipo).toBe('ok');
+    expect(r.body.fontes[0].titulo).toBe(titulo);
+  });
+});
+
+describe('assistente com a IA do Groq (provedor externo)', () => {
+  const PERGUNTA = 'Quais vacinas meu cachorro precisa tomar todo ano?';
+  let chamada;
+
+  const respostaGroq = (texto) => ({
+    ok: true, status: 200,
+    json: async () => ({ choices: [{ message: { content: texto } }] }),
+  });
+
+  beforeEach(() => {
+    process.env.AGENTE_MODO = 'groq';
+    process.env.AGENTE_CHAVE_API = 'chave-falsa-de-teste';
+    chamada = jest.spyOn(global, 'fetch');
+  });
+  afterEach(() => {
+    chamada.mockRestore();
+    delete process.env.AGENTE_MODO;
+    delete process.env.AGENTE_CHAVE_API;
+  });
+
+  it('usa o texto da IA e mantém as fontes da base da ONG', async () => {
+    chamada.mockResolvedValue(respostaGroq('Todo ano ele precisa da V10 e da antirrábica.'));
+    const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: PERGUNTA });
+    expect(r.body.tipo).toBe('ok');
+    expect(r.body.modo).toBe('groq');
+    expect(r.body.conteudo).toBe('Todo ano ele precisa da V10 e da antirrábica.');
+    expect(r.body.fontes.length).toBeGreaterThan(0);
+
+    // A IA recebe a pergunta e os itens da base, e mais nada.
+    const [url, opcoes] = chamada.mock.calls[0];
+    expect(url).toMatch(/api\.groq\.com/);
+    expect(opcoes.headers.Authorization).toBe('Bearer chave-falsa-de-teste');
+    const corpo = JSON.parse(opcoes.body);
+    expect(corpo.messages[1].content).toContain(PERGUNTA);
+    expect(corpo.messages[1].content).toMatch(/antirrábica/i);
+  });
+
+  it('volta para o modo simulado quando o limite grátis acaba (429)', async () => {
+    chamada.mockResolvedValue({ ok: false, status: 429, json: async () => ({}) });
+    const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: PERGUNTA });
+    expect(r.body.tipo).toBe('ok');
+    expect(r.body.modo).toBe('simulado');
+    expect(r.body.conteudo).toMatch(/antirrábica/i);
+  });
+
+  it('volta para o modo simulado quando o Groq está fora do ar', async () => {
+    chamada.mockRejectedValue(new TypeError('fetch failed'));
+    const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: PERGUNTA });
+    expect(r.body.modo).toBe('simulado');
+    expect(r.body.conteudo).toMatch(/antirrábica/i);
+  });
+
+  it('o aviso de urgência vem do código, mesmo que a IA não o escreva', async () => {
+    chamada.mockResolvedValue(respostaGroq('Ofereça água fresca e observe.'));
+    const r = await request(app).post('/api/assistente/perguntar')
+      .send({ pergunta: 'Meu cachorro está vomitando sangue e não come há dois dias' });
+    expect(r.body.conteudo).toMatch(/^Pelo que você descreveu, o caminho é procurar um veterinário/);
+  });
+
+  describe('busca na internet quando a base não cobre a dúvida', () => {
+    const SEM_BASE = 'Qual a melhor raça de cachorro para apartamento?';
+    const respostaWeb = (texto) => ({
+      ok: true, status: 200,
+      json: async () => ({ choices: [{ message: { content: texto } }] }),
+    });
+
+    it('responde com o que achou e mostra os links das páginas', async () => {
+      chamada.mockResolvedValue(respostaWeb(
+        'Raças pequenas e calmas costumam se adaptar bem a apartamento 【1†L2-L4】.\n'
+        + 'FONTES:\n'
+        + '- Guia do CRMV | https://www.crmvsp.gov.br/guia\n'
+        + '- javascript:alert(1)\n'
+      ));
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      expect(r.body.tipo).toBe('web');
+      expect(r.body.modo).toBe('groq-web');
+      expect(r.body.conteudo).toBe('Raças pequenas e calmas costumam se adaptar bem a apartamento.');
+      // só endereço http(s) vira fonte; o resto é descartado
+      expect(r.body.fontes).toEqual([
+        { titulo: 'Guia do CRMV', url: 'https://www.crmvsp.gov.br/guia', fonte: 'Internet', validadoPor: null },
+      ]);
+      // não validado pela ONG: o botão de encaminhar continua
+      expect(r.body.ofereceEscalar).toBe(true);
+      const corpo = JSON.parse(chamada.mock.calls[0][1].body);
+      expect(corpo.tools).toEqual([{ type: 'browser_search' }]);
+    });
+
+    it('a IA recusa o que escapou da trava de palavras', async () => {
+      chamada.mockResolvedValue(respostaWeb('FORA_DO_ESCOPO'));
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      expect(r.body.tipo).toBe('fora');
+      expect(r.body.fontes).toHaveLength(0);
+    });
+
+    it('resposta da internet sem nenhuma fonte não é mostrada', async () => {
+      chamada.mockResolvedValue(respostaWeb('Qualquer raça serve.'));
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      expect(r.body.tipo).toBe('baixa');
+      expect(r.body.conteudo).toMatch(/não encontrei/i);
+    });
+
+    it('aproveita as páginas registradas pela ferramenta de busca', async () => {
+      chamada.mockResolvedValue({
+        ok: true, status: 200,
+        json: async () => ({ choices: [{ message: {
+          content: 'Raças pequenas costumam se adaptar bem.',
+          executed_tools: [{ type: 'browser.search', search_results: { results: [
+            { title: 'Hospital Veterinário', url: 'https://hv.exemplo.edu.br/apto' },
+          ] } }],
+        } }] }),
+      });
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      expect(r.body.tipo).toBe('web');
+      expect(r.body.fontes[0].url).toBe('https://hv.exemplo.edu.br/apto');
+    });
+
+    it('sem busca ligada, segue dizendo que não sabe', async () => {
+      process.env.AGENTE_BUSCA_WEB = 'nao';
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      delete process.env.AGENTE_BUSCA_WEB;
+      expect(r.body.tipo).toBe('baixa');
+      expect(chamada).not.toHaveBeenCalled();
+    });
+
+    it('se a busca falhar, segue dizendo que não sabe', async () => {
+      chamada.mockResolvedValue({ ok: false, status: 400, json: async () => ({}) });
+      const r = await request(app).post('/api/assistente/perguntar').send({ pergunta: SEM_BASE });
+      expect(r.body.tipo).toBe('baixa');
+    });
+  });
+
+  it('assunto fora do escopo nem chega à IA', async () => {
+    const r = await request(app).post('/api/assistente/perguntar')
+      .send({ pergunta: 'Qual a capital da Austrália?' });
+    expect(r.body.tipo).toBe('fora');
+    expect(chamada).not.toHaveBeenCalled();
+  });
+});
+
 describe('proteções vindas da esteira de segurança (SAST, DAST)', () => {
   it('não anuncia a tecnologia do servidor', async () => {
-    const r = await request(app).get('/api/publico/animais');
+    const r = await request(app).get('/api/publico/animais?porPagina=50');
     expect(r.headers['x-powered-by']).toBeUndefined();
   });
 
   it('envia os cabeçalhos de proteção que o ZAP cobra', async () => {
-    const r = await request(app).get('/api/publico/animais');
+    const r = await request(app).get('/api/publico/animais?porPagina=50');
     expect(r.headers['x-content-type-options']).toBe('nosniff');
     expect(r.headers['x-frame-options']).toBe('DENY');
     expect(r.headers['content-security-policy']).toMatch(/frame-ancestors 'none'/);
@@ -435,7 +757,7 @@ describe('proteções vindas da esteira de segurança (SAST, DAST)', () => {
   });
 
   it('não devolve credenciais para origem desconhecida (CORS)', async () => {
-    const r = await request(app).get('/api/publico/animais')
+    const r = await request(app).get('/api/publico/animais?porPagina=50')
       .set('Origin', 'https://site-malicioso.example');
     expect(r.headers['access-control-allow-origin']).not.toBe('https://site-malicioso.example');
   });

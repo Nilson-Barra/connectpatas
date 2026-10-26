@@ -75,7 +75,7 @@ export default function FichaAnimal() {
       <div className="grid" style={{
         gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, alignItems: 'start',
       }}>
-        <Retrato id={animal.id} />
+        <Retrato id={animal.id} foto={animal.fotografia} nome={animal.nome} />
 
         <div className="stack" style={{ gap: 15 }}>
           <div className="rowx" style={{ gap: 11 }}>
@@ -114,9 +114,14 @@ export default function FichaAnimal() {
           {/* UC05 — só adotante logado abre solicitação. */}
           <div className="rowx">
             {!sessao.usuario && (
-              <Link className="btn pri" to="/entrar">
-                <Icone nome="check" tamanho={17} /> Entrar para solicitar adoção
-              </Link>
+              <>
+                <Link className="btn pri" to={`/criar-conta?voltar=/animais/${animal.id}`}>
+                  <Icone nome="check" tamanho={17} /> Criar conta para adotar
+                </Link>
+                <Link className="btn quiet" to={`/entrar?voltar=/animais/${animal.id}`}>
+                  Já tenho conta
+                </Link>
+              </>
             )}
             {sessao.daOng && (
               <button className="btn pri" disabled>A solicitação é feita pelo adotante</button>

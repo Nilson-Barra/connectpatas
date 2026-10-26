@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { Carregando, Erro, Pill } from '../componentes';
+import { Carregando, Erro, Pill, Retrato } from '../componentes';
 import Icone from '../icones';
+
+// Mesmas regras do servidor (RF03), conferidas antes para a pessoa não
+// esperar o envio só para descobrir que o arquivo não serve.
+const TIPOS_FOTO = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_FOTO = 5 * 1024 * 1024;
 
 const VAZIO = {
   nome: '', especie: 'Canina', raca: '', idade: '', porte: 'Médio',
@@ -16,6 +21,10 @@ export default function AnimaisDaOng() {
   const [editando, setEditando] = useState(null); // null, 'novo' ou o animal
   const [form, setForm] = useState(VAZIO);
   const [salvando, setSalvando] = useState(false);
+  // Foto escolhida e ainda não enviada, e a prévia dela na tela.
+  const [arquivo, setArquivo] = useState(null);
+  const [previa, setPrevia] = useState('');
+  const [tirarFoto, setTirarFoto] = useState(false);
   const [busca, definirBusca] = useSearchParams();
 
   const recarregar = () =>
@@ -34,13 +43,41 @@ export default function AnimaisDaOng() {
     }
   }, [busca]);
 
+  function limparFoto() {
+    if (previa) URL.revokeObjectURL(previa);
+    setArquivo(null);
+    setPrevia('');
+    setTirarFoto(false);
+  }
+
+  function escolherFoto(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!TIPOS_FOTO.includes(f.type)) {
+      setErro('A foto precisa ser JPG, PNG ou WebP.');
+      return;
+    }
+    if (f.size > MAX_FOTO) {
+      setErro('A foto pode ter no máximo 5 MB.');
+      return;
+    }
+    setErro('');
+    if (previa) URL.revokeObjectURL(previa);
+    setArquivo(f);
+    setPrevia(URL.createObjectURL(f));
+    setTirarFoto(false);
+  }
+
   function abrirNovo() {
+    limparFoto();
     setForm(VAZIO);
     setEditando('novo');
     setErro('');
   }
 
   function abrirEdicao(a) {
+    limparFoto();
     setForm({
       nome: a.nome || '', especie: a.especie || 'Canina', raca: a.raca || '',
       idade: a.idade || '', porte: a.porte || 'Médio',
@@ -57,9 +94,14 @@ export default function AnimaisDaOng() {
     setErro('');
     setSalvando(true);
     try {
-      if (editando === 'novo') await api.criarAnimal(form);
-      else await api.salvarAnimal(editando.id, form);
+      const r = editando === 'novo'
+        ? await api.criarAnimal(form)
+        : await api.salvarAnimal(editando.id, form);
+      // A foto vai depois dos dados: no cadastro novo, só agora o animal tem id.
+      if (arquivo) await api.enviarFoto(r.animal.id, arquivo);
+      else if (tirarFoto) await api.removerFoto(r.animal.id);
       await recarregar();
+      limparFoto();
       setEditando(null);
     } catch (erroApi) {
       setErro(erroApi.message);
@@ -104,7 +146,7 @@ export default function AnimaisDaOng() {
             </div>
             <div className="f">
               <label htmlFor="ar">Raça</label>
-              <input id="ar" type="text" value={form.raca} onChange={mudar('raca')} placeholder="SRD" />
+              <input id="ar" type="text" value={form.raca} onChange={mudar('raca')} placeholder="Mestiço" />
             </div>
           </div>
 
@@ -133,6 +175,35 @@ export default function AnimaisDaOng() {
                       onChange={mudar('caracteristicas')} />
           </div>
 
+          <div className="f">
+            <span className="lbl">Foto</span>
+            <div className="rowx" style={{ gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ width: 132, flex: 'none' }}>
+                <Retrato
+                  id={editando === 'novo' ? 0 : editando.id}
+                  nome={form.nome}
+                  foto={previa || (!tirarFoto && editando !== 'novo' ? editando.fotografia : '')}
+                />
+              </div>
+              <div className="stack" style={{ gap: 8 }}>
+                <div className="rowx" style={{ gap: 8 }}>
+                  <label className="btn quiet sm" htmlFor="afoto" style={{ cursor: 'pointer' }}>
+                    <Icone nome="image" tamanho={15} /> Escolher foto
+                  </label>
+                  <input id="afoto" type="file" className="oculto"
+                         accept={TIPOS_FOTO.join(',')} onChange={escolherFoto} />
+                  {(previa || (editando !== 'novo' && editando.fotografia && !tirarFoto)) && (
+                    <button type="button" className="btn quiet sm"
+                            onClick={() => { limparFoto(); setTirarFoto(editando !== 'novo'); }}>
+                      <Icone nome="x" tamanho={15} /> Remover foto
+                    </button>
+                  )}
+                </div>
+                <span className="meta">JPG, PNG ou WebP, até 5 MB. A foto é reduzida antes de ser guardada.</span>
+              </div>
+            </div>
+          </div>
+
           {editando !== 'novo' && editando.status !== 'Disponível' && (
             <p className="meta">
               O status deste animal é "{editando.status}" e não se edita aqui — quem
@@ -142,7 +213,8 @@ export default function AnimaisDaOng() {
 
           <div className="rowx">
             <span className="spacer" />
-            <button type="button" className="btn quiet" onClick={() => setEditando(null)}>
+            <button type="button" className="btn quiet"
+                    onClick={() => { limparFoto(); setEditando(null); }}>
               Cancelar
             </button>
             <button className="btn pri" type="submit" disabled={salvando}>
@@ -160,11 +232,15 @@ export default function AnimaisDaOng() {
           <div className="scroll">
             <table>
               <thead>
-                <tr><th>Nome</th><th>Espécie</th><th>Idade</th><th>Status</th><th /></tr>
+                <tr><th /><th>Nome</th><th>Espécie</th><th>Idade</th><th>Status</th><th /></tr>
               </thead>
               <tbody>
                 {lista.map((a) => (
                   <tr key={a.id}>
+                    <td style={{ width: 64 }}>
+                      <Retrato id={a.id} foto={a.fotografia} nome={a.nome}
+                               estilo={{ width: 56, borderRadius: 8 }} />
+                    </td>
                     <td style={{ fontWeight: 500 }}>{a.nome}</td>
                     <td className="meta">{a.especie}</td>
                     <td className="meta">{a.idade || '—'}</td>

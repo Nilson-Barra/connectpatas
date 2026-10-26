@@ -167,6 +167,64 @@ Para mostrar o sistema de fora (túnel, demonstração), use o build:
 na internet: o servidor de desenvolvimento tem falhas conhecidas que o build
 não tem.
 
+## Assistente com IA (Groq)
+
+O assistente de cuidados tem dois modos, escolhidos no `backend/.env`:
+
+- `AGENTE_MODO=simulado` (padrão): responde com o texto da base de
+  conhecimento da ONG, sem chamar nenhum serviço de fora.
+- `AGENTE_MODO=groq`: a IA do Groq escreve a resposta em linguagem natural,
+  usando só os itens que a busca achou na base da ONG.
+
+Para ligar o Groq:
+
+1. Crie uma conta grátis em console.groq.com e gere uma chave em API Keys.
+2. No `backend/.env`, coloque `AGENTE_MODO=groq` e `AGENTE_CHAVE_API=` com a chave.
+3. Reinicie a API.
+
+O que não muda com a IA: quem decide se há resposta, quais itens usar, o
+aviso para procurar o veterinário e o encaminhamento para a ONG continua
+sendo o código. Para o Groq vão só a pergunta e o texto dos itens da base,
+nunca dados da conta de quem perguntou. Se o Groq falhar, demorar mais de 10
+segundos ou o limite grátis acabar, o assistente volta sozinho para o modo
+simulado. O modelo padrão é `openai/gpt-oss-120b`; para trocar, use
+`AGENTE_MODELO`.
+
+Com o Groq ligado, quando a base da ONG não cobre a dúvida o assistente
+pesquisa na internet pela ferramenta de busca do próprio Groq, pedindo
+preferência a fontes como CFMV, CRMVs, universidades e governo. A resposta
+mostra os links das páginas usadas e o aviso "não validado pela ONG"; sem
+nenhum link, ela não é mostrada. O que não é sobre animais é recusado duas
+vezes: pela trava de palavras antes de tudo e pela própria IA. Para desligar
+só a busca: `AGENTE_BUSCA_WEB=nao`.
+
+A chave é segredo: fica só no `.env`, que não vai para o repositório.
+
+## Criar conta
+
+Quem quer adotar cria a conta na tela "Criar conta" (ou pelo botão "Criar conta
+para adotar" na ficha do animal) e já sai logado, de volta à ficha. A senha
+precisa ter de 8 a 72 caracteres, com letras e números, e é guardada só como
+hash.
+
+Pela tela só se cria conta de adotante: qualquer perfil enviado no formulário é
+ignorado. As contas da equipe da ONG continuam sendo criadas pela ONG. Para
+frear robôs, cada endereço de internet cria no máximo 5 contas por hora.
+
+## Fotos dos animais
+
+A equipe da ONG envia a foto na tela de cadastro e edição do animal: JPG, PNG
+ou WebP de até 5 MB. O servidor confere se o arquivo é mesmo uma imagem,
+reduz para no máximo 800 px, converte para WebP e descarta os metadados (como
+a localização que o celular grava na foto). A foto fica no próprio banco, na
+tabela `foto_animal`, para não se perder quando o sistema for publicado.
+
+A foto segue a regra do catálogo: animal disponível tem foto pública; fora
+disso, só a equipe da ONG e quem pediu para adotá-lo a enxergam.
+
+As fotos da massa de demonstração são do Pexels; os créditos estão em
+`backend/src/seeders/fotos/CREDITOS.md`.
+
 ## Usuários de demonstração
 
 Todos com a senha `connectpatas`.
@@ -187,6 +245,8 @@ Público, sem login:
 
 Autenticação:
 
+- `POST /api/auth/cadastro` — cria conta de adotante e já entra. Corpo
+  `{ nome, email, senha, telefone?, infoAdocao? }`.
 - `POST /api/auth/login` — corpo `{ email, senha }`.
 - `POST /api/auth/logout`
 - `GET /api/auth/eu` — quem está logado.

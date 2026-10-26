@@ -1,12 +1,13 @@
 const repositorio = require('./repositorio');
+const provedor = require('./provedor');
 const { dentroDoEscopo, temUrgencia, termos, pontuar, LIMIAR } = require('./recuperador');
 const { erro } = require('../../comum/erros');
 
-// Modo de operação do agente (Seção 10.4). "simulado" responde só com o texto
-// dos itens recuperados, sem chamar provedor externo: nenhum dado do usuário
-// sai da aplicação, que é o que o RNF13 exige. Trocar por um modelo de
-// linguagem é mudar esta função e nada mais — a recuperação, os guardrails e
-// o registro das fontes continuam valendo.
+// Modo de operação do agente (Seção 10.4).
+// "simulado": responde só com o texto dos itens recuperados, sem chamar nada
+// de fora. "groq": os mesmos itens vão para um modelo de linguagem, que só
+// reescreve a resposta em linguagem natural (provedor.js). Nos dois modos a
+// recuperação, os guardrails, o aviso de urgência e as fontes são os mesmos.
 const MODO = process.env.AGENTE_MODO || 'simulado';
 
 const AVISO_VETERINARIO =
@@ -101,17 +102,44 @@ const servico = {
     const achados = pontuar(pergunta, candidatos, universo);
     const melhor = achados[0];
 
-    // Guardrail de saída: sem base suficiente, o agente cala e escala.
+    // Guardrail de saída: sem base suficiente, o agente não inventa. Com o Groq
+    // ligado, tenta a internet antes de desistir; sem resposta de lá, cala e
+    // oferece encaminhar para a ONG, como antes.
     if (!melhor || melhor.confianca < LIMIAR) {
+      const web = await provedor.pesquisar(pergunta);
+      if (web && web.fora) {
+        return { tipo: 'fora', conteudo: FORA_DE_ESCOPO, ...vazio };
+      }
+      if (web) {
+        return {
+          // "web" não é "ok": a resposta não foi validada pela ONG, então o
+          // botão de encaminhar para a equipe continua aparecendo.
+          tipo: 'web',
+          conteudo: urgente ? `${AVISO_VETERINARIO} ${web.texto}` : web.texto,
+          fontes: web.fontes.map((f) => ({
+            titulo: f.titulo, url: f.url, fonte: 'Internet', validadoPor: null,
+          })),
+          confianca: null,
+          modo: 'groq-web',
+        };
+      }
       return { tipo: 'baixa', ...semSaber(SEM_RESPOSTA) };
     }
 
     // Usa só os itens próximos do melhor: juntar item fraco dilui a resposta.
     const usados = achados.filter((r) => r.confianca >= melhor.confianca * 0.75).slice(0, 2);
 
+    // Com o Groq ligado, a IA escreve a resposta a partir dos mesmos itens. O
+    // aviso de urgência é acrescentado aqui, pelo código, e não pedido à IA:
+    // ele não pode depender de o modelo lembrar de escrevê-lo.
+    const gerada = await provedor.gerar(pergunta, usados.map((r) => r.item));
+    const conteudo = gerada
+      ? (urgente ? `${AVISO_VETERINARIO} ${gerada.texto}` : gerada.texto)
+      : compor(usados, urgente);
+
     return {
       tipo: 'ok',
-      conteudo: compor(usados, urgente),
+      conteudo,
       // RNF12 e RNF15: toda resposta carrega de onde veio e quem validou.
       fontes: usados.map((r) => ({
         id: r.item.id,
@@ -120,7 +148,8 @@ const servico = {
         validadoPor: r.item.validadoPor,
       })),
       confianca: melhor.confianca,
-      modo: MODO,
+      // Qual caminho respondeu de fato: se o Groq falhou, aparece "simulado".
+      modo: gerada ? 'groq' : 'simulado',
     };
   },
 

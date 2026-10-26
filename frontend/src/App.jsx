@@ -5,6 +5,7 @@ import Icone from './icones';
 import Catalogo from './paginas/Catalogo';
 import FichaAnimal from './paginas/FichaAnimal';
 import Entrar from './paginas/Entrar';
+import CriarConta from './paginas/CriarConta';
 import MinhasSolicitacoes from './paginas/MinhasSolicitacoes';
 import DetalheSolicitacao from './paginas/DetalheSolicitacao';
 import Painel from './paginas/Painel';
@@ -49,7 +50,10 @@ function Topo() {
             <button className="btn quiet sm" onClick={sair}>Sair</button>
           </>
         ) : (
-          <Link className="btn ghost sm" to="/entrar">Entrar</Link>
+          <>
+            <Link className="btn quiet sm" to="/criar-conta">Criar conta</Link>
+            <Link className="btn ghost sm" to="/entrar">Entrar</Link>
+          </>
         )}
       </div>
     </header>
@@ -67,6 +71,7 @@ export default function App() {
               <Route path="/" element={<Catalogo />} />
               <Route path="/animais/:id" element={<FichaAnimal />} />
               <Route path="/entrar" element={<Entrar />} />
+              <Route path="/criar-conta" element={<CriarConta />} />
               {/* UC11 — o assistente atende sem login. */}
               <Route path="/assistente" element={<Assistente />} />
 

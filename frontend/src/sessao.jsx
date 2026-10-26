@@ -28,6 +28,11 @@ export function ProvedorSessao({ children }) {
       setUsuario(d.usuario);
       return d.usuario;
     },
+    async cadastrar(dados) {
+      const d = await api.cadastrar(dados);
+      setUsuario(d.usuario);
+      return d.usuario;
+    },
     async sair() {
       await api.sair();
       setUsuario(null);

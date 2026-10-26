@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useSessao } from '../sessao';
-import { Erro } from '../componentes';
+import { Erro, destinoSeguro } from '../componentes';
 
 export default function Entrar() {
   const sessao = useSessao();
   const navegar = useNavigate();
+  const [busca] = useSearchParams();
+  const voltar = destinoSeguro(busca.get('voltar'));
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
@@ -18,6 +20,8 @@ export default function Entrar() {
     try {
       const usuario = await sessao.entrar(email, senha);
       // Cada perfil cai onde tem trabalho para fazer.
+      // Quem veio de uma ficha de animal volta para ela.
+      if (voltar && usuario.tipoUsuario === 'adotante') { navegar(voltar); return; }
       navegar(usuario.tipoUsuario === 'adotante' ? '/minhas-solicitacoes'
         : usuario.tipoUsuario === 'responsavel_ong' ? '/painel' : '/solicitacoes');
     } catch (erroApi) {
@@ -46,8 +50,11 @@ export default function Entrar() {
         <div className="stack" style={{ gap: 5 }}>
           <h2>Entrar na plataforma</h2>
           <p className="meta">
-            As contas são criadas pela ONG. Para conhecer o sistema, use um dos
-            acessos de demonstração listados no README do projeto.
+            Quer adotar e ainda não tem conta?{' '}
+            <Link to={voltar ? `/criar-conta?voltar=${encodeURIComponent(voltar)}` : '/criar-conta'}>
+              Criar conta
+            </Link>
+            . As contas da equipe da ONG são criadas pela própria ONG.
           </p>
         </div>
 

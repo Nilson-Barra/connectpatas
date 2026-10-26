@@ -17,7 +17,7 @@ const VAZIAS = new Set((
   'menos ja ser sao estao estou esta tem ter tenho tendo fazer faz dar dou vai vao ' +
   'fica ficar deve devo pode posso preciso quero queria gostaria saber dizer sobre ' +
   'ao aos pelo pela nao sim bem mesmo cada qualquer entre depois antes ainda aqui ' +
-  'ali dia dias vez vezes coisa ' +
+  'ali dia dias vez vezes coisa faco achei encontrei acontece ' +
   // Verbos de uso geral: aparecem em qualquer pergunta e não dizem do que ela
   // trata. Sem eles aqui, "preciso saber o que meu cão precisa tomar" divide a
   // confiança por seis em vez de por dois, e a resposta certa fica abaixo do
@@ -34,7 +34,8 @@ const ESCOPO = (
   'pulga carrapato racao comida alimentacao saude doente sintoma veterinario ' +
   'castracao passeio adestramento comportamento late mia cuidado cuidados tutor ' +
   'lar olho olhos orelha dente dentes pata patas pele unha ferida febre vomito ' +
-  'diarreia coceira peso magro gordo castrado idoso'
+  'diarreia coceira peso magro gordo castrado idoso fogos trovao calor planta ' +
+  'lirio leishmaniose mosquito areia janela microchip abandono'
 ).split(' ');
 
 // Sinais que pedem veterinário antes de qualquer orientação (RNF12).
@@ -49,8 +50,13 @@ const URGENCIA = [
   'engasgad', 'nao levanta', 'nao anda',
 ];
 
+// Siglas curtas que dizem do que a pergunta trata e não podem cair no filtro
+// de tamanho: sem isso, "como faço o RG do meu pet" perde justamente o "RG".
+const SIGLAS = new Set(['rg']);
+
 function termos(texto) {
-  return normalizar(texto).split(/\s+/).filter((w) => w.length > 2 && !VAZIAS.has(w));
+  return normalizar(texto).split(/\s+/)
+    .filter((w) => (w.length > 2 || SIGLAS.has(w)) && !VAZIAS.has(w));
 }
 
 function dentroDoEscopo(pergunta) {

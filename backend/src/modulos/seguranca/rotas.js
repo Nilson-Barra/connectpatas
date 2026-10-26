@@ -1,9 +1,11 @@
 const { Router } = require('express');
 const envolver = require('../../comum/async');
 const { autenticado } = require('../../middlewares/autenticacao');
-const { autenticar, comPerfil, paraSessao } = require('./servico');
+const { autenticar, comPerfil, paraSessao, cadastrarAdotante } = require('./servico');
 const { erro, ErroDeAplicacao } = require('../../comum/erros');
-const { bloqueado, registrarFalha, limparFalhas } = require('../../middlewares/protecao');
+const {
+  bloqueado, registrarFalha, limparFalhas, cadastroBloqueado, registrarCadastro,
+} = require('../../middlewares/protecao');
 
 const rotas = Router();
 
@@ -34,6 +36,21 @@ rotas.post('/login', envolver(async (req, res) => {
   req.session.usuario = paraSessao(usuario);
 
   res.json({ usuario: req.session.usuario });
+}));
+
+// Criar conta de adotante pela tela. A pessoa já sai logada.
+rotas.post('/cadastro', envolver(async (req, res) => {
+  const espera = cadastroBloqueado(req);
+  if (espera) {
+    res.set('Retry-After', String(espera));
+    throw new ErroDeAplicacao(429, 'Muitas contas criadas a partir desta rede. Tente mais tarde.');
+  }
+  const usuario = await cadastrarAdotante(req.body);
+  registrarCadastro(req);
+
+  await new Promise((ok, falha) => req.session.regenerate((e) => (e ? falha(e) : ok())));
+  req.session.usuario = paraSessao(usuario);
+  res.status(201).json({ usuario: req.session.usuario });
 }));
 
 rotas.post('/logout', envolver(async (req, res) => {

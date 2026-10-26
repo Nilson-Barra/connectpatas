@@ -4,13 +4,14 @@ const Usuario = require('./usuario')(sequelize);
 const Ong = require('./ong')(sequelize);
 const { ResponsavelOng, VoluntarioOng, Adotante } = require('./perfis')(sequelize);
 const Animal = require('./animal')(sequelize);
+const FotoAnimal = Animal.Foto;
 const { SolicitacaoAdocao, Mensagem } = require('./adocao')(sequelize);
 const { ItemConhecimento, ConversaIa, MensagemIa } = require('./assistente')(sequelize);
 const Sessao = require('./sessao')(sequelize);
 
 const db = {
   Usuario, Ong, ResponsavelOng, VoluntarioOng, Adotante,
-  Animal, SolicitacaoAdocao, Mensagem,
+  Animal, FotoAnimal, SolicitacaoAdocao, Mensagem,
   ItemConhecimento, ConversaIa, MensagemIa, Sessao,
 };
 

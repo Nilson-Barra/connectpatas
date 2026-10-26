@@ -24,7 +24,8 @@ const CSP = [
   "script-src 'self'",
   "style-src 'self' https://fonts.googleapis.com",
   "font-src https://fonts.gstatic.com",
-  "img-src 'self' data:",
+  // blob: é a prévia da foto escolhida no cadastro do animal, antes do envio.
+  "img-src 'self' data: blob:",
   "connect-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",

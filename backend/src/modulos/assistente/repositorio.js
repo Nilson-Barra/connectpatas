@@ -34,7 +34,7 @@ const repositorio = {
   async buscar(idOng, termos, limite = 8) {
     const limpos = termos
       .map((t) => t.replace(/[^a-z0-9]/gi, ''))
-      .filter((t) => t.length > 2);
+      .filter((t) => t.length > 1);
     if (!limpos.length) return [];
 
     const consulta = limpos.join(' | ');
