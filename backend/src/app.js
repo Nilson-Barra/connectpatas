@@ -1,3 +1,5 @@
+const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const session = require('express-session');
 const cors = require('cors');
@@ -11,6 +13,20 @@ const rotasOng = require('./modulos/ong/rotas');
 const rotasAnimal = require('./modulos/animal/rotas');
 const rotasAdocao = require('./modulos/adocao/rotas');
 const rotasAssistente = require('./modulos/assistente/rotas');
+
+// A mesma política que o vite preview manda (frontend/vite.config.js) e que o
+// DAST da esteira examina: fontes do Google Fonts, todo o resto do próprio site.
+const POLITICA_DAS_TELAS = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data: blob:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ');
 
 function criarApp() {
   const app = express();
@@ -74,6 +90,26 @@ function criarApp() {
   app.use('/api', rotasAnimal);
   app.use('/api', rotasAdocao);
   app.use('/api', rotasAssistente);
+
+  // Em produção a própria API entrega as telas (o build do frontend), num
+  // endereço só. Assim o cookie de sessão é do mesmo site e não precisa de
+  // CORS. Em desenvolvimento quem serve as telas continua sendo o Vite.
+  const telas = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
+  if (producao && fs.existsSync(path.join(telas, 'index.html'))) {
+    app.use((req, res, next) => {
+      if (!req.path.startsWith('/api')) res.setHeader('Content-Security-Policy', POLITICA_DAS_TELAS);
+      next();
+    });
+    // Arquivos com hash no nome (assets/) nunca mudam: cache longo.
+    app.use('/assets', express.static(path.join(telas, 'assets'), { immutable: true, maxAge: '1y' }));
+    app.use(express.static(telas, { index: false, maxAge: 0 }));
+    // Qualquer outro endereço que não seja da API é uma tela do React
+    // (/animais/12, /painel...): devolve o index.html e o roteador resolve.
+    app.get(/^(?!\/api(\/|$)).*/, (_req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.sendFile(path.join(telas, 'index.html'));
+    });
+  }
 
   app.use((_req, res) => res.status(404).json({ erro: 'Rota não encontrada.' }));
   app.use(tratarErros);

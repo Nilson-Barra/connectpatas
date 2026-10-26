@@ -1,0 +1,42 @@
+# Publicação do ConnectPatas no Render (plano gratuito).
+#
+# Um serviço só: a API do Express entrega também as telas já montadas
+# (frontend/dist). O banco continua no Neon.
+#
+# No primeiro deploy o Render pede os valores marcados com "sync: false";
+# eles ficam guardados lá e nunca vão para o repositório.
+services:
+  - type: web
+    name: connectpatas
+    runtime: node
+    plan: free
+    # O Render não tem servidor no Brasil; Virgínia é o mais perto do Neon de
+    # São Paulo entre os disponíveis.
+    region: virginia
+    branch: main
+    # --include=dev: o build das telas (Vite) e as migrations (sequelize-cli)
+    # são dependências de desenvolvimento, e com NODE_ENV=production o npm
+    # pularia as duas.
+    buildCommand: >-
+      npm ci --include=dev --prefix frontend &&
+      npm run build --prefix frontend &&
+      npm ci --include=dev --prefix backend &&
+      npm run db:migrate --prefix backend
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/saude
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # Endereço do banco no Neon (Connection string, a URL inteira).
+      - key: DATABASE_URL
+        sync: false
+      # O Render gera um valor aleatório longo na primeira vez.
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: AGENTE_MODO
+        value: groq
+      # Chave do Groq (começa com gsk_).
+      - key: AGENTE_CHAVE_API
+        sync: false
